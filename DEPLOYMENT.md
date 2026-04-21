@@ -26,7 +26,7 @@ The repo also includes `.python-version` so Render uses Python 3.11 instead of i
 ### 4. After deploy
 
 - Open the deployed URL.
-- Upload a supported file.
+- Upload a supported file or a `.zip` archive of your project folder.
 - Review findings in the browser.
 
 ## Local web run
@@ -48,6 +48,6 @@ Then open `http://127.0.0.1:5000`.
 
 ## Notes
 
-- The Flask web app scans uploaded files, not the entire server filesystem.
+- The Flask web app scans uploaded files or uploaded `.zip` project archives, not the server filesystem.
 - For team use, add authentication before exposing this publicly.
 - Free plans are best for demos, internal previews, and small usage.

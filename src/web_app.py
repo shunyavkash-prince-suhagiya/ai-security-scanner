@@ -4,6 +4,7 @@ Minimal Flask web interface for the security scanner.
 from collections import Counter
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import zipfile
 
 from flask import Flask, render_template_string, request
 from werkzeug.utils import secure_filename
@@ -12,7 +13,8 @@ from config import EXTENSIONS, PATTERNS
 from scanner.file_scanner import FileScanner
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+ARCHIVE_EXTENSIONS = {".zip"}
 
 TEMPLATE = """
 <!doctype html>
@@ -111,6 +113,10 @@ TEMPLATE = """
       color: #7c2d12;
       font-size: 0.95rem;
     }
+    .subtle {
+      color: #6b7280;
+      font-size: 0.95rem;
+    }
     code {
       background: rgba(154, 52, 18, 0.08);
       padding: 2px 6px;
@@ -122,11 +128,12 @@ TEMPLATE = """
   <div class="wrap">
     <div class="panel">
       <h1>AI Security Scanner</h1>
-      <p>Upload a supported file and the scanner will look for emails, hardcoded passwords, API keys, AWS keys, and Basic Auth URLs.</p>
-      <p class="note">Supported extensions: {{ extensions|join(", ") }}</p>
+      <p>Upload a supported file or a <code>.zip</code> of your project and the scanner will look for emails, hardcoded passwords, API keys, AWS keys, and Basic Auth URLs.</p>
+      <p class="note">Supported scan targets: {{ extensions|join(", ") }} and .zip archives</p>
+      <p class="subtle">For a full project scan on the web app, zip the folder first and upload the zip file.</p>
       <form method="post" enctype="multipart/form-data">
         <input type="file" name="scan_file" required>
-        <button type="submit">Scan File</button>
+        <button type="submit">Scan Upload</button>
       </form>
 
       {% if error %}
@@ -135,6 +142,7 @@ TEMPLATE = """
 
       {% if filename %}
       <h2>Results for <code>{{ filename }}</code></h2>
+      <p class="subtle">Scanned {{ findings|length }} matching findings.</p>
       <div class="cards">
         <div class="card critical">CRITICAL<br>{{ counts["CRITICAL"] }}</div>
         <div class="card high">HIGH<br>{{ counts["HIGH"] }}</div>
@@ -149,6 +157,7 @@ TEMPLATE = """
             <th>Risk</th>
             <th>Type</th>
             <th>Value</th>
+            <th>File</th>
             <th>Line</th>
           </tr>
         </thead>
@@ -158,6 +167,7 @@ TEMPLATE = """
             <td>{{ finding.risk_level }}</td>
             <td>{{ finding.type }}</td>
             <td><code>{{ finding.value }}</code></td>
+            <td><code>{{ finding.file_path }}</code></td>
             <td>{{ finding.line_number }}</td>
           </tr>
           {% endfor %}
@@ -175,7 +185,50 @@ TEMPLATE = """
 
 
 def _allowed_file(filename: str) -> bool:
-    return Path(filename).suffix.lower() in set(EXTENSIONS)
+    suffix = Path(filename).suffix.lower()
+    return suffix in set(EXTENSIONS) or suffix in ARCHIVE_EXTENSIONS
+
+
+def _safe_extract_zip(zip_path: Path, extract_root: Path) -> Path:
+    """Extract a zip archive safely and return the directory to scan."""
+    archive_root = extract_root / "uploaded_zip"
+    archive_root.mkdir(parents=True, exist_ok=True)
+
+    with zipfile.ZipFile(zip_path) as archive:
+        for member in archive.infolist():
+            member_path = Path(member.filename)
+            if member_path.is_absolute():
+                raise ValueError("Zip archive contains absolute paths.")
+            if ".." in member_path.parts:
+                raise ValueError("Zip archive contains unsafe paths.")
+        archive.extractall(archive_root)
+
+    return archive_root
+
+
+def _scan_uploaded_path(upload_path: Path):
+    """Scan a single uploaded file or an extracted zip directory."""
+    scanner = FileScanner(PATTERNS)
+
+    if upload_path.suffix.lower() in ARCHIVE_EXTENSIONS:
+        extract_root = upload_path.parent / "extracted"
+        scan_root = _safe_extract_zip(upload_path, extract_root)
+    else:
+        scan_root = upload_path
+
+    findings = scanner.scan_directory(scan_root, EXTENSIONS)
+
+    # Shorten displayed paths for zip uploads so results are easier to read.
+    normalized_findings = []
+    for finding in findings:
+        file_path = Path(finding.file_path)
+        try:
+            finding.file_path = str(file_path.relative_to(scan_root))
+        except ValueError:
+            finding.file_path = file_path.name
+        normalized_findings.append(finding)
+
+    return normalized_findings
 
 
 @app.get("/")
@@ -217,9 +270,26 @@ def scan_upload():
         safe_name = secure_filename(uploaded_file.filename)
         temp_path = Path(temp_dir) / safe_name
         uploaded_file.save(temp_path)
-
-        scanner = FileScanner(PATTERNS)
-        findings = scanner.scan_directory(temp_path, EXTENSIONS)
+        try:
+            findings = _scan_uploaded_path(temp_path)
+        except zipfile.BadZipFile:
+            return render_template_string(
+                TEMPLATE,
+                extensions=EXTENSIONS,
+                error="That zip file could not be opened.",
+                filename=None,
+                counts={"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
+                findings=[],
+            )
+        except ValueError as exc:
+            return render_template_string(
+                TEMPLATE,
+                extensions=EXTENSIONS,
+                error=str(exc),
+                filename=None,
+                counts={"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
+                findings=[],
+            )
 
     grouped = Counter(finding.risk_level for finding in findings)
     counts = {
