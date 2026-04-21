@@ -2,11 +2,13 @@
 Minimal Flask web interface for the security scanner.
 """
 from collections import Counter
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import zipfile
 
 from flask import Flask, render_template_string, request
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 try:
@@ -17,7 +19,8 @@ except ModuleNotFoundError:  # pragma: no cover - package import fallback
     from src.scanner.file_scanner import FileScanner
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "50"))
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 ARCHIVE_EXTENSIONS = {".zip"}
 
 TEMPLATE = """
@@ -239,66 +242,8 @@ def _scan_uploaded_path(upload_path: Path):
     return normalized_findings
 
 
-@app.get("/")
-def index():
-    return render_template_string(
-        TEMPLATE,
-        extensions=EXTENSIONS,
-        error=None,
-        filename=None,
-        counts={"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
-        findings=[],
-    )
-
-
-@app.post("/")
-def scan_upload():
-    uploaded_file = request.files.get("scan_file")
-    if uploaded_file is None or not uploaded_file.filename:
-        return render_template_string(
-            TEMPLATE,
-            extensions=EXTENSIONS,
-            error="Choose a file to scan first.",
-            filename=None,
-            counts={"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
-            findings=[],
-        )
-
-    if not _allowed_file(uploaded_file.filename):
-        return render_template_string(
-            TEMPLATE,
-            extensions=EXTENSIONS,
-            error="That file type is not supported yet.",
-            filename=None,
-            counts={"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
-            findings=[],
-        )
-
-    with TemporaryDirectory() as temp_dir:
-        safe_name = secure_filename(uploaded_file.filename)
-        temp_path = Path(temp_dir) / safe_name
-        uploaded_file.save(temp_path)
-        try:
-            findings = _scan_uploaded_path(temp_path)
-        except zipfile.BadZipFile:
-            return render_template_string(
-                TEMPLATE,
-                extensions=EXTENSIONS,
-                error="That zip file could not be opened.",
-                filename=None,
-                counts={"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
-                findings=[],
-            )
-        except ValueError as exc:
-            return render_template_string(
-                TEMPLATE,
-                extensions=EXTENSIONS,
-                error=str(exc),
-                filename=None,
-                counts={"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
-                findings=[],
-            )
-
+def _render_home(error=None, filename=None, findings=None):
+    findings = findings or []
     grouped = Counter(finding.risk_level for finding in findings)
     counts = {
         "CRITICAL": grouped.get("CRITICAL", 0),
@@ -309,11 +254,49 @@ def scan_upload():
     return render_template_string(
         TEMPLATE,
         extensions=EXTENSIONS,
-        error=None,
-        filename=uploaded_file.filename,
+        error=error,
+        filename=filename,
         counts=counts,
         findings=findings,
     )
+
+
+@app.get("/")
+def index():
+    return _render_home()
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_file_too_large(_error):
+    return _render_home(
+        error=(
+            f"Upload too large. The current limit is {MAX_UPLOAD_MB} MB. "
+            "Zip the folder more tightly or upload a smaller archive."
+        )
+    ), 413
+
+
+@app.post("/")
+def scan_upload():
+    uploaded_file = request.files.get("scan_file")
+    if uploaded_file is None or not uploaded_file.filename:
+        return _render_home(error="Choose a file to scan first.")
+
+    if not _allowed_file(uploaded_file.filename):
+        return _render_home(error="That file type is not supported yet.")
+
+    with TemporaryDirectory() as temp_dir:
+        safe_name = secure_filename(uploaded_file.filename)
+        temp_path = Path(temp_dir) / safe_name
+        uploaded_file.save(temp_path)
+        try:
+            findings = _scan_uploaded_path(temp_path)
+        except zipfile.BadZipFile:
+            return _render_home(error="That zip file could not be opened.")
+        except ValueError as exc:
+            return _render_home(error=str(exc))
+
+    return _render_home(filename=uploaded_file.filename, findings=findings)
 
 
 @app.get("/healthz")
