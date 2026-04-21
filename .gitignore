@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+venv/
+env/
+.env
+
+# Virtual Environment
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Project specific
+data/raw/
+data/processed/
+data/models/
+*.pkl
+*.joblib
+reports/
+*.log
+build/
+dist/
+*.html
+*.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.key
+*.pem
+*.crt
