@@ -1,0 +1,47 @@
+name: Security Scan
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run scanner
+        run: |
+          PYTHONPATH=src python src/main.py . --json --output security_report.html
+
+      - name: Fail on CRITICAL findings
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("security_report.json").read_text())
+          critical = [f for f in report["findings"] if f["risk"] == "CRITICAL"]
+          print(f"critical_findings={len(critical)}")
+          if critical:
+              raise SystemExit(1)
+          PY
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-scan-report
+          path: |
+            security_report.html
+            security_report.json

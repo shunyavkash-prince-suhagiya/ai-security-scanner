@@ -9,8 +9,12 @@ import zipfile
 from flask import Flask, render_template_string, request
 from werkzeug.utils import secure_filename
 
-from config import EXTENSIONS, PATTERNS
-from scanner.file_scanner import FileScanner
+try:
+    from config import EXTENSIONS, PATTERNS
+    from scanner.file_scanner import FileScanner
+except ModuleNotFoundError:  # pragma: no cover - package import fallback
+    from src.config import EXTENSIONS, PATTERNS
+    from src.scanner.file_scanner import FileScanner
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
@@ -155,6 +159,8 @@ TEMPLATE = """
         <thead>
           <tr>
             <th>Risk</th>
+            <th>Score</th>
+            <th>Detector</th>
             <th>Type</th>
             <th>Value</th>
             <th>File</th>
@@ -165,6 +171,8 @@ TEMPLATE = """
           {% for finding in findings %}
           <tr>
             <td>{{ finding.risk_level }}</td>
+            <td>{{ finding.risk_score }}</td>
+            <td>{{ finding.detector }}</td>
             <td>{{ finding.type }}</td>
             <td><code>{{ finding.value }}</code></td>
             <td><code>{{ finding.file_path }}</code></td>

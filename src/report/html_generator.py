@@ -41,6 +41,7 @@ class HTMLReportGenerator:
         .risk-critical {{ color: #dc3545; font-weight: bold; }}
         .risk-high {{ color: #fd7e14; font-weight: bold; }}
         .risk-medium {{ color: #ffc107; font-weight: bold; }}
+        .risk-low {{ color: #28a745; font-weight: bold; }}
         code {{ background: #f4f4f4; padding: 2px 5px; border-radius: 3px; font-family: monospace; }}
         pre {{ background: #f4f4f4; padding: 10px; overflow-x: auto; border-radius: 5px; }}
         .footer {{ margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; text-align: center; }}
@@ -61,19 +62,23 @@ class HTMLReportGenerator:
         <h2>⚠️ Detailed Findings</h2>
         <table>
             <thead>
-                <tr><th>Risk</th><th>Type</th><th>Value</th><th>File</th><th>Line</th></tr>
+                <tr><th>Risk</th><th>Score</th><th>Detector</th><th>Type</th><th>Value</th><th>File</th><th>Line</th></tr>
             </thead>
             <tbody>
 """
         
         for f in findings[:100]:  # Limit to 100 findings
             risk = getattr(f, 'risk_level', 'MEDIUM')
+            score = getattr(f, 'risk_score', 0)
+            detector = escape(str(getattr(f, 'detector', 'regex')))
             finding_type = escape(str(getattr(f, 'type', 'Unknown')))
             finding_value = escape(str(getattr(f, 'value', '')[:50]))
             finding_path = escape(str(getattr(f, 'file_path', '')))
             html += f"""
                 <tr>
                     <td class="risk-{risk.lower()}">{risk}</td>
+                    <td>{score}</td>
+                    <td>{detector}</td>
                     <td>{finding_type}</td>
                     <td><code>{finding_value}</code></td>
                     <td><small>{finding_path}</small></td>

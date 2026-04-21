@@ -1,6 +1,7 @@
 import zipfile
 from pathlib import Path
 
+from ai import AIAnalyzer
 from config import EXTENSIONS, PATTERNS
 from scanner.file_scanner import FileScanner
 from web_app import _scan_uploaded_path
@@ -50,3 +51,35 @@ def test_scan_uploaded_zip_finds_nested_secret(tmp_path):
     assert len(findings) == 1
     assert findings[0].type == "API Key"
     assert findings[0].file_path.endswith("project/service/.env")
+
+
+def test_ai_analyzer_detects_obfuscated_secret_assignment(tmp_path):
+    suspect_file = tmp_path / "service.py"
+    suspect_file.write_text(
+        'client_secret_blob = "QWxhZGRpbjpvcGVuIHNlc2FtZTEyMzQ1Njc4OTA="\n',
+        encoding="utf-8",
+    )
+
+    scanner = FileScanner(PATTERNS)
+    findings = scanner.scan_directory(suspect_file, EXTENSIONS)
+
+    assert any(f.type == "AI Suspicious Secret" for f in findings)
+    ai_finding = next(f for f in findings if f.type == "AI Suspicious Secret")
+    assert ai_finding.detector == "ai"
+    assert ai_finding.risk_score >= 61
+
+
+def test_ai_scoring_reduces_test_fixture_severity():
+    analyzer = AIAnalyzer()
+    score, classification, evidence = analyzer.score_finding(
+        match_type="API Key",
+        file_path="tests/fixtures/sample.env",
+        context='token = "dummy-token-value"',
+        value="dummy-token-value",
+        frequency=1,
+        file_content='token = "dummy-token-value"\n# sample fixture\n',
+    )
+
+    assert score < 81
+    assert classification in {"MEDIUM", "HIGH"}
+    assert any("test-or-mock-file" == item for item in evidence)

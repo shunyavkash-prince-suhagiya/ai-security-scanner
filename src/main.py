@@ -7,9 +7,14 @@ from pathlib import Path
 from datetime import datetime
 import sys
 
-from config import EXTENSIONS, PATTERNS
-from report.html_generator import HTMLReportGenerator
-from scanner.file_scanner import FileScanner
+try:
+    from config import EXTENSIONS, PATTERNS
+    from report.html_generator import HTMLReportGenerator
+    from scanner.file_scanner import FileScanner
+except ModuleNotFoundError:  # pragma: no cover - package import fallback
+    from src.config import EXTENSIONS, PATTERNS
+    from src.report.html_generator import HTMLReportGenerator
+    from src.scanner.file_scanner import FileScanner
 
 def main():
     parser = argparse.ArgumentParser(description='AI Security Scanner')
@@ -54,7 +59,10 @@ def main():
                     'value': f.value,
                     'file': f.file_path,
                     'line': f.line_number,
-                    'risk': f.risk_level
+                    'risk': f.risk_level,
+                    'risk_score': f.risk_score,
+                    'detector': f.detector,
+                    'evidence': f.evidence,
                 }
                 for f in filtered
             ]
@@ -79,7 +87,10 @@ def main():
         print("\n⚠️ HIGH RISK ISSUES (first 5):")
         high_risk = [f for f in filtered if f.risk_level in ['HIGH', 'CRITICAL']]
         for f in high_risk[:5]:
-            print(f"  • {f.type}: {Path(f.file_path).name}:{f.line_number}")
+            print(
+                f"  • {f.type} [{f.risk_level}/{f.risk_score}]"
+                f": {Path(f.file_path).name}:{f.line_number}"
+            )
 
 if __name__ == "__main__":
     main()
