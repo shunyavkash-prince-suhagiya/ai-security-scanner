@@ -3,6 +3,7 @@
 ## Best free option: Render
 
 This project now includes a minimal Flask web app in `src/web_app.py` and a `render.yaml` blueprint.
+The repo also includes `.python-version` so Render uses Python 3.11 instead of its newer default.
 
 ### 1. Prepare the repo
 

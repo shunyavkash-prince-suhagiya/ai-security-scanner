@@ -11,9 +11,6 @@ setup(
     install_requires=[
         "Flask>=3.1.0",
         "gunicorn>=23.0.0",
-        "regex>=2023.10.3",
-        "jinja2>=3.1.2",
-        "colorama>=0.4.6",
     ],
     entry_points={
         "console_scripts": [
