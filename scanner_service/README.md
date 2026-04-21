@@ -10,7 +10,7 @@ This folder contains a production-oriented skeleton for evolving the scanner int
 ## Suggested structure
 
 ```text
-platform/
+scanner_service/
   api/
     auth.py
     dashboard.py

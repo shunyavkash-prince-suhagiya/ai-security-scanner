@@ -58,7 +58,7 @@ async def create_scan(
     db.commit()
 
     # Replace this import with your task queue wiring in production.
-    # from platform.worker.tasks import process_scan
+    # from scanner_service.worker.tasks import process_scan
     # process_scan.delay(scan_id, destination)
 
     return ScanResponse(

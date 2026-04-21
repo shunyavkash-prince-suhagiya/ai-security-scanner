@@ -7,7 +7,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-COPY platform/requirements.txt /tmp/requirements.txt
+COPY scanner_service/requirements.txt /tmp/requirements.txt
 RUN python -m venv /opt/venv && /opt/venv/bin/pip install -r /tmp/requirements.txt
 
 FROM python:3.11-slim AS runtime
@@ -24,8 +24,8 @@ RUN useradd --create-home appuser && \
 
 COPY --from=builder /opt/venv /opt/venv
 COPY src /app/src
-COPY platform /app/platform
+COPY scanner_service /app/scanner_service
 
 USER appuser
 EXPOSE 8000
-CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-w", "2", "-b", "0.0.0.0:8000", "platform.api.main:app"]
+CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-w", "2", "-b", "0.0.0.0:8000", "scanner_service.api.main:app"]
